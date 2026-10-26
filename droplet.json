@@ -14,7 +14,8 @@
     "network-client",
     "hud",
     "lock-screen",
-    "menu-bar"
+    "menu-bar",
+    "shelf-write"
   ],
   "surfaces": [
     "live-activity",
@@ -35,7 +36,15 @@
     "repository": "https://github.com/janluca22467/droppy-3dprint",
     "license": "MIT"
   },
-  "screenshots": [],
+  "screenshots": [
+    "screenshot-shelf.png",
+    "screenshot-camera.png",
+    "screenshot-notch.png",
+    "screenshot-hud.png",
+    "screenshot-lock-screen.png",
+    "screenshot-settings.png",
+    "screenshot-island.png"
+  ],
   "keywords": [
     "3d printing",
     "octoprint",

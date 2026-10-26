@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/images/icon.png" width="128" alt="Print Live icon">
+<img src="Assets/readme-icon.png" width="128" alt="Print Live icon">
 
 # Print Live for Droppy
 
@@ -24,7 +24,7 @@ progress next to the notch, all printers on the shelf with preview and filament,
 ---
 
 <p align="center">
-  <img src="docs/images/shelf.png" width="620" alt="All printers on the Droppy shelf">
+  <img src="Assets/screenshot-shelf.png" width="620" alt="All printers on the Droppy shelf">
 </p>
 
 ## Features
@@ -48,27 +48,27 @@ progress next to the notch, all printers on the shelf with preview and filament,
 
 | In the notch | On the Dynamic Island |
 | :---: | :---: |
-| <img src="docs/images/notch.png" width="420" alt="Progress in the notch"> | <img src="docs/images/island.png" width="260" alt="Progress on the island"> |
+| <img src="Assets/screenshot-notch.png" width="420" alt="Progress in the notch"> | <img src="Assets/screenshot-island.png" width="260" alt="Progress on the island"> |
 
 <p align="center">
-  <img src="docs/images/camera.png" width="520" alt="Live camera on the shelf"><br>
+  <img src="Assets/screenshot-camera.png" width="520" alt="Live camera on the shelf"><br>
   <sub>The live camera on the shelf</sub>
 </p>
 
 <p align="center">
-  <img src="docs/images/hud.png" width="520" alt="Print done alert"><br>
+  <img src="Assets/screenshot-hud.png" width="520" alt="Print done alert"><br>
   <sub>The alert when a print is done</sub>
 </p>
 
 <p align="center">
-  <img src="docs/images/lock-screen.png" width="760" alt="Lock screen status"><br>
+  <img src="Assets/screenshot-lock-screen.png" width="760" alt="Lock screen status"><br>
   <sub>Progress on Droppy's lock screen</sub>
 </p>
 
 <details>
 <summary><b>Settings</b></summary>
 <br>
-<p align="center"><img src="docs/images/settings.png" width="640" alt="Settings page"></p>
+<p align="center"><img src="Assets/screenshot-settings.png" width="640" alt="Settings page"></p>
 </details>
 
 ## Supported printers

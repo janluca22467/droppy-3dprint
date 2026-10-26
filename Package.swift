@@ -8,7 +8,7 @@ let package = Package(
         .library(name: "PrintLive", type: .dynamic, targets: ["PrintLive"])
     ],
     dependencies: [
-        .package(url: "https://gitlab.com/droppyformac1/droppykit.git", from: "1.6.0")
+        .package(url: "https://gitlab.com/droppyformac1/droppykit.git", from: "1.19.0")
     ],
     targets: [
         .target(
