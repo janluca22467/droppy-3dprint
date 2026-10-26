@@ -8,6 +8,10 @@ final class AnycubicCloudConnection: PrinterConnection {
     private var task: Task<Void, Never>?
     private var tokenChecked = false
     private var current: PrintStatus?
+    private var printerID: String?
+    private var projectID: String?
+
+    private static let imageBase = "https://workbentch.s3.us-east-2.amazonaws.com/"
 
     private static let base = "https://cloud-universe.anycubic.com/p/p/workbench/api"
     private static let appID = "f9b3528877c94d5c9c5af32245db46ef"
@@ -24,6 +28,34 @@ final class AnycubicCloudConnection: PrinterConnection {
     }()
 
     init(config: PrinterConfig) { self.config = config }
+
+    var supportedActions: Set<PrintAction> { [.pause, .resume, .stop] }
+
+    func makeCamera() -> CameraFeed? { nil }
+
+    func perform(_ action: PrintAction) async -> Bool {
+        guard let current, current.state.isActive,
+              let printer = printerID.flatMap({ Int64($0) }),
+              let project = projectID.flatMap({ Int64($0) }) else { return false }
+        let order: Int
+        switch action {
+        case .pause: order = 2
+        case .resume: order = 3
+        case .stop: order = 4
+        }
+        let body: [String: Any] = [
+            "order_id": order,
+            "printer_id": printer,
+            "project_id": project,
+            "data": NSNull(),
+            "ams_info": NSNull(),
+            "settings": NSNull(),
+        ]
+        guard case .data(let data) = await request("work/operation/sendOrder", body: body),
+              let reply = data as? [String: Any],
+              let msgid = reply["msgid"], !(msgid is NSNull) else { return false }
+        return true
+    }
 
     private var token: String {
         config.apiKey.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "\"'")))
@@ -54,6 +86,10 @@ final class AnycubicCloudConnection: PrinterConnection {
     }
 
     private func get(_ path: String, query: [URLQueryItem] = []) async -> Reply {
+        await request(path, query: query)
+    }
+
+    private func request(_ path: String, query: [URLQueryItem] = [], body: [String: Any]? = nil) async -> Reply {
         guard var components = URLComponents(string: "\(Self.base)/\(path)") else { return .unreachable }
         if !query.isEmpty { components.queryItems = query }
         guard let url = components.url else { return .unreachable }
@@ -76,6 +112,11 @@ final class AnycubicCloudConnection: PrinterConnection {
         ]
         var request = URLRequest(url: url)
         for (key, value) in headers { request.setValue(value, forHTTPHeaderField: key) }
+        if let body {
+            guard let encoded = try? JSONSerialization.data(withJSONObject: body) else { return .unreachable }
+            request.httpMethod = "POST"
+            request.httpBody = encoded
+        }
         guard let (data, response) = try? await session.data(for: request) else { return .unreachable }
         let code = (response as? HTTPURLResponse)?.statusCode ?? 0
         if code == 401 || code == 403 { return .denied }
@@ -113,6 +154,8 @@ final class AnycubicCloudConnection: PrinterConnection {
         let wanted = config.serial.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let match = wanted.isEmpty ? printers.first : printers.first { ($0["name"] as? String ?? "").lowercased() == wanted }
         guard let printer = match, let printerID = text(printer["id"]) else { return (offline("err.noPrinter"), 60) }
+        self.printerID = printerID
+        projectID = nil
 
         var s = PrintStatus()
         var deviceStatus = number(printer["device_status"])
@@ -123,6 +166,7 @@ final class AnycubicCloudConnection: PrinterConnection {
             s.nozzle = number(parameter["curr_nozzle_temp"])
             s.bed = number(parameter["curr_hotbed_temp"])
             deviceStatus = number(info["device_status"]) ?? deviceStatus
+            s.slots = AnycubicConnection.aceSlots(info["multi_color_box"])
         case let reply:
             return failure(reply)
         }
@@ -133,6 +177,7 @@ final class AnycubicCloudConnection: PrinterConnection {
             let jobs = data as? [[String: Any]] ?? []
             if let job = jobs.first(where: { text($0["printer_id"]) == printerID }) {
                 apply(job, to: &s)
+                if s.state.isActive { projectID = text(job["id"]) }
                 if s.state.isActive, let projectID = text(job["id"]),
                    case .data(let data) = await get("v2/project/info", query: [URLQueryItem(name: "id", value: projectID)]),
                    let temp = (data as? [String: Any])?["temp"] as? [String: Any] {
@@ -173,7 +218,32 @@ final class AnycubicCloudConnection: PrinterConnection {
             ?? (job["settings"] as? String).flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
         s.layer = number(settings?["curr_layer"]).map { Int($0) }
         s.totalLayers = number(settings?["total_layers"]).map { Int($0) }.flatMap { $0 > 0 ? $0 : nil }
+        s.jobID = text(job["id"]) ?? text(job["taskid"])
+
+        let slice = (job["slice_param"] as? [String: Any])
+            ?? (job["slice_param"] as? String).flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+        s.preview = previewURL(job["img"] as? String) ?? previewURL(slice?["image_id"] as? String)
+        s.filamentNeeded = grams(in: slice)
         if s.state == .finished { s.progress = 1; s.remaining = 0 }
+    }
+
+    private func previewURL(_ path: String?) -> PreviewImage? {
+        guard let path = path?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty else { return nil }
+        let link = path.lowercased().hasPrefix("http") ? path : Self.imageBase + (path.hasPrefix("/") ? String(path.dropFirst()) : path)
+        return URL(string: link).map { .url($0) }
+    }
+
+    private func grams(in slice: [String: Any]?) -> Double? {
+        guard let slice else { return nil }
+        let keys = ["filament_weight", "filament_used_g", "used_g", "total_weight", "weight"]
+        for key in keys {
+            if let g = number(slice[key]), g > 0 { return g }
+        }
+        if let materials = slice["paint_infos"] as? [[String: Any]] {
+            let total = materials.compactMap { m in keys.lazy.compactMap { self.number(m[$0]) }.first }.reduce(0, +)
+            if total > 0 { return total }
+        }
+        return nil
     }
 
     private func failure(_ reply: Reply) -> (PrintStatus?, UInt64) {

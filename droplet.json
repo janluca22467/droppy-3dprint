@@ -1,9 +1,9 @@
 {
   "id": "print-live",
   "name": "Print Live",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "summary": "Your 3D prints live in the notch",
-  "description": "Print Live shows your 3D printers in Droppy. Progress and time left sit next to the notch, every printer with its temperatures is on the shelf, and a notch alert tells you when a print is done, paused or failed. Works with OctoPrint, Bambu Lab, Anycubic and Klipper (Moonraker) printers over the local network, and with Anycubic printers in online mode through Anycubic Cloud.",
+  "description": "Print Live shows your 3D printers in Droppy. Progress and time left sit next to the notch, every printer with its preview, filament slots and temperatures is on the shelf, and a second shelf widget shows the printer camera. Notch alerts tell you when a print is done, paused or failed, when the first layer is down, when ten minutes are left and when the nozzle runs cold. Pause, resume or stop a print after a confirmation, see remaining filament from Spoolman, keep a print history with statistics, and check every printer from the menu bar. Works with OctoPrint, Bambu Lab, Anycubic and Klipper (Moonraker) printers over the local network, and with Anycubic printers in online mode through Anycubic Cloud.",
   "category": "Productivity",
   "kit": {
     "abi": 1,
@@ -13,14 +13,16 @@
   "capabilities": [
     "network-client",
     "hud",
-    "lock-screen"
+    "lock-screen",
+    "menu-bar"
   ],
   "surfaces": [
     "live-activity",
     "shelf-widget",
     "settings-pane",
     "hud",
-    "lock-screen-status"
+    "lock-screen-status",
+    "menu-bar-extra"
   ],
   "icon": "PrintLive.icon",
   "creator": {
@@ -43,6 +45,12 @@
     "printer",
     "progress",
     "klipper",
-    "moonraker"
+    "moonraker",
+    "camera",
+    "filament",
+    "spoolman",
+    "ams",
+    "print history",
+    "menu bar"
   ]
 }

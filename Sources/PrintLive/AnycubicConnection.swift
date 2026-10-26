@@ -13,7 +13,11 @@ final class AnycubicConnection: PrinterConnection {
     private var stopped = true
     private var modelID = ""
     private var deviceID = ""
+    private var streamURL: URL?
     private var current = PrintStatus()
+    private var pending: [String: CheckedContinuation<Bool, Never>] = [:]
+
+    var supportedActions: Set<PrintAction> { [.pause, .resume, .stop] }
 
     private struct Credentials {
         let host: String
@@ -66,10 +70,51 @@ final class AnycubicConnection: PrinterConnection {
         retryTask?.cancel(); retryTask = nil
         client?.disconnect()
         client = nil
+        for id in Array(pending.keys) { resolve(id, false) }
+    }
+
+    func makeCamera() -> CameraFeed? {
+        guard client != nil, !stopped, !modelID.isEmpty, !deviceID.isEmpty,
+              let url = streamURL ?? URL(string: "http://\(host):18088/flv") else { return nil }
+        let feed = FLVCameraFeed(url: url)
+        feed.onStart = { [weak self] in self?.startCapture() }
+        return feed
+    }
+
+    private func startCapture() {
+        guard client != nil, !stopped else { return }
+        send("anycubic/anycubicCloud/v1/web/printer/\(modelID)/\(deviceID)/video", type: "video", action: "startCapture", data: [:])
+    }
+
+    private static func flvURL(_ value: Any?) -> URL? {
+        guard let urls = value as? [String: Any],
+              let link = urls["rtspUrl"] as? String,
+              link.hasPrefix("http"), let url = URL(string: link) else { return nil }
+        return url
+    }
+
+    func perform(_ action: PrintAction) async -> Bool {
+        guard client != nil, !stopped, current.state.isActive else { return false }
+        let msgid = UUID().uuidString.lowercased()
+        let topic = "anycubic/anycubicCloud/v1/web/printer/\(modelID)/\(deviceID)/print"
+        let taskID = current.jobID ?? "-1"
+        return await withCheckedContinuation { continuation in
+            pending[msgid] = continuation
+            send(topic, type: "print", action: action.rawValue, data: ["taskid": taskID], msgid: msgid)
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 8_000_000_000)
+                self?.resolve(msgid, false)
+            }
+        }
+    }
+
+    private func resolve(_ msgid: String, _ accepted: Bool) {
+        pending.removeValue(forKey: msgid)?.resume(returning: accepted)
     }
 
     private func fail(_ message: String) {
         client = nil
+        for id in Array(pending.keys) { resolve(id, false) }
         pollTask?.cancel()
         onStatus?(PrintStatus(state: .offline, message: message))
         retryTask = Task { [weak self] in
@@ -87,6 +132,7 @@ final class AnycubicConnection: PrinterConnection {
         guard let token = info["token"] as? String, token.count >= 32 else { throw HandshakeError.badResponse }
         let model = (info["modelId"] as? String) ?? (info["modelId"] as? Int).map(String.init) ?? ""
         let ctrlURLString = (info["ctrlInfoUrl"] as? String) ?? "http://\(host):18910/ctrl"
+        if let link = info["rtspUrl"] as? String, link.hasPrefix("http"), let url = URL(string: link) { streamURL = url }
 
         let ts = Int64(Date().timeIntervalSince1970 * 1000)
         let nonce = Self.random(6, from: "abcdefghijklmnopqrstuvwxyz0123456789")
@@ -161,9 +207,14 @@ final class AnycubicConnection: PrinterConnection {
                 }
             }
         case .message(let topic, let payload):
-            guard let json = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
-                  let data = json["data"] as? [String: Any] else { return }
-            apply(topic: topic, data: data)
+            guard let json = try? JSONSerialization.jsonObject(with: payload) as? [String: Any] else { return }
+            if let msgid = json["msgid"] as? String, pending[msgid] != nil {
+                let state = (json["state"] as? String ?? "").lowercased()
+                let code = number(json["code"]).map(Int.init)
+                resolve(msgid, state != "failed" && (code == nil || code == 200))
+            }
+            guard let data = json["data"] as? [String: Any] else { return }
+            apply(topic: topic, action: (json["action"] as? String ?? "").lowercased(), data: data)
         case .disconnected(let reason):
             fail(reason.contains("refused") ? L.s("err.refused") : L.s("err.unreachable"))
         }
@@ -174,23 +225,25 @@ final class AnycubicConnection: PrinterConnection {
         send("\(base)/web/printer/\(modelID)/\(deviceID)/info", type: "info")
         send("\(base)/web/printer/\(modelID)/\(deviceID)/tempature", type: "tempature")
         send("\(base)/slicer/printer/\(modelID)/\(deviceID)/print", type: "print")
+        send("\(base)/web/printer/\(modelID)/\(deviceID)/multiColorBox", type: "multiColorBox", action: "getInfo", data: [:])
     }
 
-    private func send(_ topic: String, type: String) {
+    private func send(_ topic: String, type: String, action: String = "query", data: [String: Any]? = nil, msgid: String? = nil) {
         let body: [String: Any] = [
             "type": type,
-            "action": "query",
+            "action": action,
             "timestamp": Int64(Date().timeIntervalSince1970 * 1000),
-            "msgid": UUID().uuidString.lowercased(),
-            "data": NSNull(),
+            "msgid": msgid ?? UUID().uuidString.lowercased(),
+            "data": data.map { $0 as Any } ?? NSNull(),
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: body) else { return }
         client?.publish(topic, data)
     }
 
-    private func apply(topic: String, data: [String: Any]) {
+    private func apply(topic: String, action: String, data: [String: Any]) {
         var s = current
         if topic.hasSuffix("/info/report") {
+            if let url = Self.flvURL(data["urls"]) { streamURL = url }
             if let temp = data["temp"] as? [String: Any] { applyTemps(temp, to: &s) }
             if let project = data["project"] as? [String: Any] {
                 applyProject(project, to: &s)
@@ -198,11 +251,24 @@ final class AnycubicConnection: PrinterConnection {
                 let printer = (data["state"] as? String ?? "").lowercased()
                 s.state = printer == "offline" ? .offline : .idle
                 s.progress = nil; s.remaining = nil; s.layer = nil; s.totalLayers = nil; s.fileName = nil
+                s.jobID = nil; s.preview = nil
             }
         } else if topic.hasSuffix("/tempature/report") {
             applyTemps(data, to: &s)
         } else if topic.hasSuffix("/print/report") {
             applyProject(data, to: &s)
+        } else if topic.contains("/multiColorBox") {
+            if data["multi_color_box"] != nil {
+                guard action == "getinfo" else { return }
+                s.slots = Self.aceSlots(data["multi_color_box"])
+            } else if action == "autoupdateinfo", let loaded = number(data["loaded_slot"]).map(Int.init) {
+                let box = number(data["id"]).map(Int.init) ?? 0
+                for i in s.slots.indices where s.slots[i].id.hasPrefix("\(box)-") {
+                    s.slots[i].isActive = s.slots[i].id == "\(box)-\(loaded)"
+                }
+            } else {
+                return
+            }
         } else {
             return
         }
@@ -241,7 +307,61 @@ final class AnycubicConnection: PrinterConnection {
         s.layer = number(p["curr_layer"]).map(Int.init) ?? s.layer
         s.totalLayers = (number(p["total_layers"]) ?? number(p["total_layer"])).map(Int.init) ?? s.totalLayers
         s.fileName = (p["filename"] as? String).cleanedFileName ?? s.fileName
+        if let task = Self.text(p["task_id"]) ?? Self.text(p["taskid"]) { s.jobID = task == "-1" ? nil : task }
+        for key in ["img", "image", "image_url", "thumbnail", "preview"] {
+            if let link = p[key] as? String, link.hasPrefix("http"), let url = URL(string: link) {
+                s.preview = .url(url)
+                break
+            }
+        }
         if s.state == .finished { s.progress = 1; s.remaining = 0 }
+    }
+
+    static func aceSlots(_ value: Any?) -> [FilamentSlot] {
+        let boxes = (value as? [[String: Any]]) ?? (value as? [String: Any]).map { [$0] } ?? []
+        var result: [FilamentSlot] = []
+        for (position, box) in boxes.enumerated() {
+            let boxID = Self.integer(box["id"]) ?? position
+            let raw = (box["slots"] as? [[String: Any]]) ?? []
+            var loaded = Self.integer(box["loaded_slot"]) ?? -1
+            if loaded < 0 {
+                let candidates = raw.filter { Self.integer($0["status"]) == 5 && !(($0["type"] as? String) ?? "").isEmpty }
+                if candidates.count == 1 { loaded = Self.integer(candidates[0]["index"]) ?? -1 }
+            }
+            for (offset, slot) in raw.enumerated() {
+                let index = Self.integer(slot["index"]) ?? offset
+                let material = (slot["type"] as? String)?.trimmingCharacters(in: .whitespaces)
+                let empty = (material ?? "").isEmpty || Self.integer(slot["edit_status"]) == 2
+                var hex: String?
+                if let rgb = slot["color"] as? [Any], rgb.count >= 3 {
+                    let c = rgb.prefix(3).map { min(max(Self.integer($0) ?? 0, 0), 255) }
+                    hex = String(format: "#%02X%02X%02X", c[0], c[1], c[2])
+                }
+                let percent = (slot["consumables_percent"] as? NSNumber)?.doubleValue
+                result.append(FilamentSlot(
+                    id: "\(boxID)-\(index)",
+                    unit: boxes.count > 1 ? "ACE \(boxID + 1)" : "ACE",
+                    material: empty ? nil : material,
+                    colorHex: empty ? nil : hex,
+                    remaining: percent.flatMap { $0 > 0 && $0 <= 100 ? $0 : nil },
+                    isActive: !empty && index == loaded,
+                    isEmpty: empty
+                ))
+            }
+        }
+        return result
+    }
+
+    private static func integer(_ value: Any?) -> Int? {
+        if let n = value as? NSNumber { return n.intValue }
+        if let s = value as? String { return Int(s) }
+        return nil
+    }
+
+    private static func text(_ value: Any?) -> String? {
+        if let s = value as? String, !s.isEmpty { return s }
+        if let n = value as? NSNumber { return n.stringValue }
+        return nil
     }
 
     private func number(_ value: Any?) -> Double? {

@@ -7,9 +7,9 @@
 **Your 3D prints, live in the notch.**
 
 A [Droppy](https://getdroppy.app) droplet that shows every 3D printer on your network, and Anycubic printers in online mode:
-progress next to the notch, all printers on the shelf, and an alert the moment a print is done.
+progress next to the notch, all printers on the shelf with preview and filament, the camera, and an alert the moment a print is done.
 
-[![Version](https://img.shields.io/badge/version-1.1.0-ff8a00?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.2.0-ff8a00?style=flat-square)](CHANGELOG.md)
 [![macOS](https://img.shields.io/badge/macOS-14%2B-000000?style=flat-square&logo=apple&logoColor=white)](#requirements)
 [![Droppy](https://img.shields.io/badge/Droppy-15.3%2B-2f7cf6?style=flat-square)](https://getdroppy.app)
 [![OctoPrint](https://img.shields.io/badge/OctoPrint-supported-13c100?style=flat-square)](#octoprint)
@@ -31,8 +31,13 @@ progress next to the notch, all printers on the shelf, and an alert the moment a
 
 - 🖨️ **Five printer types**: OctoPrint, Bambu Lab, Anycubic, Klipper (Moonraker) and Anycubic Cloud, side by side
 - ⏱️ **Live in the notch**: a progress ring with percent and time left, right next to the notch
-- 🗂️ **Shelf overview**: every printer with state, file, time left, finish time, layers and temperatures
-- 🔔 **Notch alerts**: a card when a print is done, paused or fails
+- 🗂️ **Shelf overview**: every printer with preview, state, file, time left, finish time, layers, temperatures and filament slots
+- 📷 **Camera**: a second shelf widget with the live picture of the current printer
+- 🔔 **Notch alerts**: done, paused, failed, first layer done, 10 minutes left and a temperature warning, each one switchable
+- ⏯️ **Controls**: pause, resume and stop a print from the shelf, always after a confirmation
+- 🧵 **Spoolman**: remaining filament of the linked spool, with a warning when a print needs more than is left
+- 📊 **History**: statistics, a 7-day chart and the last prints, stored only on this Mac
+- 📋 **Menu bar**: every printer with state, percent and time left
 - 🔒 **Lock screen**: progress of the current print as a line or a ring
 - 🏠 **Local first**: talks to your printers on your own network, no cloud, no account
 - ☁️ **Anycubic Cloud**: Anycubic printers in normal online mode, without LAN mode, using your account's web token
@@ -44,6 +49,11 @@ progress next to the notch, all printers on the shelf, and an alert the moment a
 | In the notch | On the Dynamic Island |
 | :---: | :---: |
 | <img src="docs/images/notch.png" width="420" alt="Progress in the notch"> | <img src="docs/images/island.png" width="260" alt="Progress on the island"> |
+
+<p align="center">
+  <img src="docs/images/camera.png" width="520" alt="Live camera on the shelf"><br>
+  <sub>The live camera on the shelf</sub>
+</p>
 
 <p align="center">
   <img src="docs/images/hud.png" width="520" alt="Print done alert"><br>
@@ -71,7 +81,56 @@ progress next to the notch, all printers on the shelf, and an alert the moment a
 | <a id="klipper"></a>**Klipper** (Moonraker, for example Mainsail, Fluidd, Creality K1, Sovol) | REST API over HTTP, port 7125 | Address (for example `mainsailos.local`), optional API key |
 | <a id="anycubic-cloud"></a>**Anycubic Cloud** (Kobra S1 and other Anycubic printers in online mode) | Anycubic's web API over HTTPS, polled every 30 to 60 seconds | Web token of your Anycubic account, optional printer name |
 
-Print Live only **reads** status. It never starts, pauses or stops a print.
+Print Live reads the status of every printer. It only sends a command when you press pause, resume or stop on the shelf and confirm it. It never starts a print.
+
+## Camera
+
+Add the **Camera** widget to the shelf to see the live picture of the printer that is printing. With more than one printer with a camera, a small button in the widget switches between them. The stream only runs while the widget is on screen and stops when the shelf closes.
+
+| Printer | Camera |
+| --- | --- |
+| OctoPrint | MJPEG stream of the configured webcam |
+| Klipper (Moonraker) | MJPEG stream of the configured webcam |
+| Bambu Lab P1 and A1 series | Camera stream on port 6000, LAN mode required |
+| Bambu Lab X1 and H2 series | **Not supported.** These models stream over RTSP, which Print Live can't show yet |
+| Anycubic (LAN mode) | Shown when the printer offers a stream Print Live can read |
+| Anycubic Cloud | **Not possible.** Anycubic Cloud streams video through a proprietary service. Use LAN mode for the camera |
+
+## Alerts
+
+Print Live shows a card in the notch when:
+
+- a print is **done**, **paused** or **fails or is stopped**
+- the **first layer is done**, once per print, when the second layer starts
+- **10 minutes are left**, once per print
+- the **nozzle stays more than 15 °C below its target** for a minute while printing, once per print
+
+Every alert can be switched off under **Alerts** in the settings. The temperature warning is off by default.
+
+## Controls
+
+While a print runs, the shelf row shows **pause** or **resume** and **stop** for printers that support it (OctoPrint, Bambu Lab, Anycubic, Klipper and Anycubic Cloud).
+
+> [!IMPORTANT]
+> Stopping a print can't be undone. Print Live always asks for confirmation before it stops or pauses a print. If the printer doesn't accept the command, a short alert tells you so.
+
+## Spoolman
+
+Print Live can read your spools from [Spoolman](https://github.com/Donkie/Spoolman).
+
+1. Enter the address of your Spoolman server under **Spoolman** in the settings, for example `http://192.168.1.11:3001`, and press **Test**.
+2. Edit a printer and choose its **Spool**.
+3. The shelf row shows the spool name and the grams left. When the slicer told the printer how much filament the print needs and the spool has less, the row shows **Not enough filament**.
+
+Spool data refreshes every minute while a printer prints and every five minutes otherwise. The filament check needs a printer that reports the filament weight of the job, which not every printer or slicer does.
+
+## History
+
+Every print that finishes, fails or is stopped while Print Live runs is added to the history under **History** in the settings: number of prints, success rate, total print time, filament used, a chart of the last 7 days and the last ten prints. The history is stored only on this Mac and can be cleared with **Clear history**.
+
+## Menu bar
+
+Print Live adds an item to the menu bar that lists every printer with its state, percent and time left.
 
 ## Requirements
 
@@ -134,7 +193,8 @@ When the token expires, Print Live shows *Token expired, paste a new one*. Repea
 - Print Live connects only to the addresses you enter. It makes no other network connections.
 - API keys, access codes and tokens are stored in the macOS Keychain on this Mac.
 - OctoPrint, Bambu Lab, Anycubic and Klipper printers stay local. Nothing is sent to Anycubic, Bambu Lab or any other cloud.
-- Anycubic Cloud is the only exception: it talks to Anycubic's servers with your token to read the printer status.
+- Anycubic Cloud is the only exception: it talks to Anycubic's servers with your token to read the printer status and to send the pause, resume or stop commands you confirm.
+- The print history and the Spoolman link are stored only on this Mac. Spoolman is contacted only at the address you enter.
 
 ## Troubleshooting
 
@@ -148,6 +208,8 @@ When the token expires, Print Live shows *Token expired, paste a new one*. Repea
 | *Token expired, paste a new one* | The Anycubic Cloud token is no longer valid. Get a new one as described above |
 | *Anycubic Cloud is busy, retrying* | Anycubic's servers rejected the request for now. Print Live tries again in two minutes |
 | *No printer found in this account* | Check the printer name, or leave it empty to use the first printer of the account |
+| *Spoolman is not reachable* | Check the address and port of your Spoolman server and that it is on the same network |
+| No camera picture | Check that the printer's webcam works in OctoPrint, Mainsail or Fluidd. Bambu X1 and H2 and Anycubic Cloud have no camera in Print Live |
 | Nothing in the notch | The notch only shows a printer while it prints, and for ten minutes after it is done |
 
 ## Build from source
@@ -180,8 +242,16 @@ Sources/PrintLive/
   MoonrakerConnection.swift      Klipper (Moonraker) REST client
   AnycubicCloudConnection.swift  Anycubic Cloud web API client
   MQTTClient.swift               small MQTT 3.1.1 client over TLS
-  PrintViews.swift               notch, shelf and alert views
+  PrintViews.swift               notch, shelf, alert and menu bar views
+  CameraWidget.swift             camera shelf widget
+  CameraFeeds.swift              MJPEG and snapshot camera streams
+  BambuCameraFeed.swift          Bambu Lab P1 and A1 camera stream
+  PreviewImageLoader.swift       print preview loading and filament dots
+  SpoolmanClient.swift           Spoolman REST client
+  PrintHistory.swift             print history and statistics
   PrintLiveSettings.swift        settings page
+  SettingsSections.swift         Spoolman and history settings
+  Demo.swift                     demo data for the harness
   SecretStore.swift              Keychain storage
   Localization.swift             the six languages
 PrintLive.icon/                  app icon

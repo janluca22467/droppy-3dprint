@@ -34,13 +34,13 @@ struct PrintLiveSettings: View {
                                         showsSecret = false
                                         withAnimation { draft = PrinterConfig(name: kind.title, kind: kind, host: "") }
                                     }
-                                    .buttonStyle(DroppyQuietButtonStyle(size: .small))
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
                                 }
                             }
                         }
                     }
                 }
-                .droppyFlatGlassControls()
             }
 
             if let binding = draftBinding {
@@ -53,6 +53,7 @@ struct PrintLiveSettings: View {
                     }
                 } content: {
                     PrinterEditor(
+                        droplet: droplet,
                         draft: binding,
                         showsSecret: $showsSecret,
                         isNew: !droplet.printers.contains { $0.id == binding.wrappedValue.id },
@@ -69,24 +70,51 @@ struct PrintLiveSettings: View {
                 }
             }
 
+            SpoolmanSection(droplet: droplet)
+
+            DropletSettingsSection {
+                VStack(alignment: .leading, spacing: 2) {
+                    settingsSectionHeader(LocalizedStringKey(L.s("set.alerts")))
+                    Text(L.s("set.alertsDetail"))
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
+            } content: {
+                DropletSettingsCard {
+                    ForEach(PrintAlert.allCases) { alert in
+                        DropletToggleRow(
+                            title: L.s("alert.\(alert.rawValue)"),
+                            icon: alert.symbol,
+                            iconColor: alert.tint,
+                            subtitle: L.s("alert.\(alert.rawValue)Detail"),
+                            isOn: droplet.alertBinding(alert)
+                        )
+                    }
+                }
+            }
+
+            if let history = droplet.history {
+                HistorySection(droplet: droplet, history: history)
+            }
+
             DropletSettingsSection {
                 settingsSectionHeader(LocalizedStringKey(L.s("set.where")))
             } content: {
                 DropletSettingsCard {
-                    DropletControlRow(title: L.s("set.whereNotch"), icon: "rectangle.topthird.inset.filled", iconColor: .blue) {
-                        Text(L.s("set.whereNotchValue")).font(.system(size: 12)).foregroundStyle(.secondary)
-                    }
-                    DropletControlRow(title: L.s("set.whereShelf"), icon: "square.grid.2x2.fill", iconColor: .purple) {
-                        Text(L.s("set.whereShelfValue")).font(.system(size: 12)).foregroundStyle(.secondary)
-                    }
-                    DropletControlRow(title: L.s("set.whereHUD"), icon: "bell.badge.fill", iconColor: .orange) {
-                        Text(L.s("set.whereHUDValue")).font(.system(size: 12)).foregroundStyle(.secondary)
-                    }
-                    DropletControlRow(title: L.s("set.whereLock"), icon: "lock.fill", iconColor: .gray) {
-                        Text(L.s("set.whereLockValue")).font(.system(size: 12)).foregroundStyle(.secondary)
-                    }
+                    whereRow("set.whereNotch", icon: "rectangle.topthird.inset.filled", color: .blue)
+                    whereRow("set.whereShelf", icon: "square.grid.2x2.fill", color: .purple)
+                    whereRow("set.whereCamera", icon: "video.fill", color: .teal)
+                    whereRow("set.whereHUD", icon: "bell.badge.fill", color: .orange)
+                    whereRow("set.whereMenu", icon: "menubar.rectangle", color: .pink)
+                    whereRow("set.whereLock", icon: "lock.fill", color: .gray)
                 }
             }
+        }
+    }
+
+    private func whereRow(_ key: String, icon: String, color: Color) -> some View {
+        DropletControlRow(title: L.s(key), icon: icon, iconColor: color) {
+            Text(L.s("\(key)Value")).font(.system(size: 12)).foregroundStyle(.secondary)
         }
     }
 
@@ -117,10 +145,12 @@ private struct PrinterListRow: View {
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
-                .buttonStyle(DroppyCircleButtonStyle(size: 24))
+                .buttonStyle(.bordered)
+                .controlSize(.small)
                 .help(L.s("set.reconnect"))
                 Button(L.s("set.edit"), action: onEdit)
-                    .buttonStyle(DroppyQuietButtonStyle(size: .small))
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
             }
         }
     }
@@ -144,6 +174,7 @@ private struct PrinterListRow: View {
 }
 
 private struct PrinterEditor: View {
+    @ObservedObject var droplet: PrintLiveDroplet
     @Binding var draft: PrinterConfig
     @Binding var showsSecret: Bool
     let isNew: Bool
@@ -172,6 +203,16 @@ private struct PrinterEditor: View {
                 secret(L.s("field.webToken"), icon: "key.fill", text: $draft.apiKey)
                 field(L.s("field.printerName"), icon: "printer.fill", color: .indigo, text: $draft.serial, prompt: "Kobra S1")
             }
+            if droplet.spoolmanState != .off || !droplet.spools.isEmpty {
+                DropletGroupedPickerRow(title: L.s("spool.link"), icon: "circle.circle", iconColor: .orange, subtitle: L.s("spool.linkDetail")) {
+                    Picker(L.s("spool.link"), selection: spoolBinding) {
+                        Text(L.s("spool.none")).tag(0)
+                        ForEach(droplet.spools) { spool in
+                            Text(spoolTitle(spool)).tag(spool.id)
+                        }
+                    }
+                }
+            }
             DropletToggleRow(title: L.s("field.enabled"), icon: "power", iconColor: .green, isOn: $draft.isEnabled)
             DropletControlRow(title: draft.isComplete ? L.s("field.ready") : L.s("field.missing"),
                               icon: draft.isComplete ? "checkmark.circle.fill" : "exclamationmark.circle",
@@ -179,17 +220,30 @@ private struct PrinterEditor: View {
                 HStack(spacing: DroppySpacing.xs) {
                     if !isNew {
                         Button(L.s("set.delete"), role: .destructive, action: onDelete)
-                            .buttonStyle(DroppyQuietButtonStyle(size: .small, destructive: true))
+                            .buttonStyle(.bordered)
                     }
                     Button(L.s("set.cancel"), action: onCancel)
-                        .buttonStyle(DroppyQuietButtonStyle(size: .small))
+                        .buttonStyle(.bordered)
                     Button(L.s("set.save"), action: onSave)
-                        .buttonStyle(DroppyAccentButtonStyle(size: .small))
+                        .buttonStyle(.borderedProminent)
                         .disabled(!draft.isComplete)
                 }
             }
         }
-        .droppyFlatGlassControls()
+    }
+
+    private var spoolBinding: Binding<Int> {
+        Binding(
+            get: { droplet.spoolLinks[draft.id] ?? 0 },
+            set: { droplet.setSpool($0 == 0 ? nil : $0, for: draft.id) }
+        )
+    }
+
+    private func spoolTitle(_ spool: Spool) -> String {
+        var parts = [spool.name]
+        if let vendor = spool.vendor, !spool.name.contains(vendor) { parts.append(vendor) }
+        if let grams = spool.remainingWeight { parts.append(L.f("spool.left", Int(grams.rounded()))) }
+        return parts.joined(separator: " · ")
     }
 
     private func field(_ title: String, icon: String, color: Color, text: Binding<String>, prompt: String) -> some View {
@@ -219,7 +273,7 @@ private struct PrinterEditor: View {
                 } label: {
                     Image(systemName: showsSecret ? "eye.slash" : "eye")
                 }
-                .buttonStyle(DroppyCircleButtonStyle(size: 24))
+                .buttonStyle(.borderless)
             }
         }
     }
