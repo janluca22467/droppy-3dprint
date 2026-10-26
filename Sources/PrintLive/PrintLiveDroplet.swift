@@ -121,6 +121,8 @@ public final class PrintLiveDroplet: NSObject, ObservableObject, Droplet {
         case .octoprint: connection = OctoPrintConnection(config: printer)
         case .bambu: connection = BambuConnection(config: printer)
         case .anycubic: connection = AnycubicConnection(config: printer)
+        case .moonraker: connection = MoonrakerConnection(config: printer)
+        case .anycubicCloud: connection = AnycubicCloudConnection(config: printer)
         }
         let id = printer.id
         connection.onStatus = { [weak self] status in self?.update(id, status) }
@@ -291,6 +293,6 @@ extension PrintLiveDroplet: SettingsPaneProviding {
     public func makeSettingsPane(context: SettingsPaneContext) -> AnyView { AnyView(PrintLiveSettings(droplet: self)) }
 
     public var settingsSearchEntries: [SettingsSearchEntry] {
-        [SettingsSearchEntry(title: L.s("set.printers"), keywords: ["octoprint", "bambu", "anycubic", "printer", "3d"])]
+        [SettingsSearchEntry(title: L.s("set.printers"), keywords: ["octoprint", "bambu", "anycubic", "klipper", "moonraker", "cloud", "printer", "3d"])]
     }
 }

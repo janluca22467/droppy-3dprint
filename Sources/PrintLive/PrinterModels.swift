@@ -1,7 +1,7 @@
 import Foundation
 
 enum PrinterKind: String, Codable, CaseIterable, Sendable, Identifiable {
-    case octoprint, bambu, anycubic
+    case octoprint, bambu, anycubic, moonraker, anycubicCloud
 
     var id: String { rawValue }
 
@@ -10,6 +10,8 @@ enum PrinterKind: String, Codable, CaseIterable, Sendable, Identifiable {
         case .octoprint: return "OctoPrint"
         case .bambu: return "Bambu Lab"
         case .anycubic: return "Anycubic"
+        case .moonraker: return "Klipper"
+        case .anycubicCloud: return "Anycubic Cloud"
         }
     }
 
@@ -18,6 +20,8 @@ enum PrinterKind: String, Codable, CaseIterable, Sendable, Identifiable {
         case .octoprint: return "server.rack"
         case .bambu: return "cube.fill"
         case .anycubic: return "printer.fill"
+        case .moonraker: return "bolt.horizontal.fill"
+        case .anycubicCloud: return "cloud.fill"
         }
     }
 }
@@ -33,11 +37,12 @@ struct PrinterConfig: Codable, Equatable, Identifiable, Sendable {
     var isEnabled = true
 
     var isComplete: Bool {
-        guard !host.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
+        if kind != .anycubicCloud, host.trimmingCharacters(in: .whitespaces).isEmpty { return false }
         switch kind {
         case .octoprint: return !apiKey.isEmpty
         case .bambu: return !serial.isEmpty && !accessCode.isEmpty
-        case .anycubic: return true
+        case .anycubic, .moonraker: return true
+        case .anycubicCloud: return !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
     }
 }

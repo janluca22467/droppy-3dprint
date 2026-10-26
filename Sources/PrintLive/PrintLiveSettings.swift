@@ -130,6 +130,8 @@ private struct PrinterListRow: View {
         case .octoprint: return .green
         case .bambu: return .teal
         case .anycubic: return .blue
+        case .moonraker: return .red
+        case .anycubicCloud: return .indigo
         }
     }
 
@@ -152,8 +154,10 @@ private struct PrinterEditor: View {
     var body: some View {
         DropletSettingsCard {
             field(L.s("field.name"), icon: "tag.fill", color: .gray, text: $draft.name, prompt: draft.kind.title)
-            field(L.s("field.host"), icon: "network", color: .blue, text: $draft.host,
-                  prompt: draft.kind == .octoprint ? "octopi.local" : "192.168.1.50")
+            if draft.kind != .anycubicCloud {
+                field(L.s("field.host"), icon: "network", color: .blue, text: $draft.host,
+                      prompt: draft.kind == .octoprint ? "octopi.local" : (draft.kind == .moonraker ? "mainsailos.local" : "192.168.1.50"))
+            }
             switch draft.kind {
             case .octoprint:
                 secret(L.s("field.apiKey"), icon: "key.fill", text: $draft.apiKey)
@@ -162,6 +166,11 @@ private struct PrinterEditor: View {
                 secret(L.s("field.accessCode"), icon: "lock.fill", text: $draft.accessCode)
             case .anycubic:
                 EmptyView()
+            case .moonraker:
+                secret(L.s("field.apiKeyOptional"), icon: "key.fill", text: $draft.apiKey)
+            case .anycubicCloud:
+                secret(L.s("field.webToken"), icon: "key.fill", text: $draft.apiKey)
+                field(L.s("field.printerName"), icon: "printer.fill", color: .indigo, text: $draft.serial, prompt: "Kobra S1")
             }
             DropletToggleRow(title: L.s("field.enabled"), icon: "power", iconColor: .green, isOn: $draft.isEnabled)
             DropletControlRow(title: draft.isComplete ? L.s("field.ready") : L.s("field.missing"),

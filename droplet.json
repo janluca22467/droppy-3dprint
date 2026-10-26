@@ -1,9 +1,9 @@
 {
   "id": "print-live",
   "name": "Print Live",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "summary": "Your 3D prints live in the notch",
-  "description": "Print Live shows your 3D printers in Droppy. Progress and time left sit next to the notch, every printer with its temperatures is on the shelf, and a notch alert tells you when a print is done, paused or failed. Works with OctoPrint, Bambu Lab and Anycubic printers over the local network, without any cloud.",
+  "description": "Print Live shows your 3D printers in Droppy. Progress and time left sit next to the notch, every printer with its temperatures is on the shelf, and a notch alert tells you when a print is done, paused or failed. Works with OctoPrint, Bambu Lab, Anycubic and Klipper (Moonraker) printers over the local network, and with Anycubic printers in online mode through Anycubic Cloud.",
   "category": "Productivity",
   "kit": {
     "abi": 1,
@@ -39,7 +39,10 @@
     "octoprint",
     "bambu lab",
     "anycubic",
+    "anycubic cloud",
     "printer",
-    "progress"
+    "progress",
+    "klipper",
+    "moonraker"
   ]
 }
