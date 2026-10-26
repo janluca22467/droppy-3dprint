@@ -53,6 +53,21 @@ enum PrintState: String, Sendable, Equatable {
     var isActive: Bool { self == .printing || self == .preparing || self == .paused }
 }
 
+struct FilamentSlot: Equatable, Sendable, Identifiable {
+    var id: String
+    var unit: String?
+    var material: String?
+    var colorHex: String?
+    var remaining: Double?
+    var isActive = false
+    var isEmpty = false
+}
+
+enum PreviewImage: Equatable, Sendable {
+    case url(URL, headers: [String: String] = [:])
+    case data(Data)
+}
+
 struct PrintStatus: Equatable, Sendable {
     var state: PrintState = .connecting
     var progress: Double?
@@ -65,6 +80,11 @@ struct PrintStatus: Equatable, Sendable {
     var nozzleTarget: Double?
     var bed: Double?
     var bedTarget: Double?
+    var chamber: Double?
+    var preview: PreviewImage?
+    var slots: [FilamentSlot] = []
+    var filamentNeeded: Double?
+    var jobID: String?
     var message: String?
     var updated = Date()
 
@@ -73,11 +93,32 @@ struct PrintStatus: Equatable, Sendable {
     static let offline = PrintStatus(state: .offline)
 }
 
+enum PrintAction: String, Sendable, CaseIterable, Hashable {
+    case pause, resume, stop
+}
+
+@MainActor
+protocol CameraFeed: AnyObject {
+    var onFrame: ((Data) -> Void)? { get set }
+    var onError: ((String) -> Void)? { get set }
+    func start()
+    func stop()
+}
+
 @MainActor
 protocol PrinterConnection: AnyObject {
     var onStatus: ((PrintStatus) -> Void)? { get set }
+    var supportedActions: Set<PrintAction> { get }
     func start()
     func stop()
+    func makeCamera() -> CameraFeed?
+    func perform(_ action: PrintAction) async -> Bool
+}
+
+extension PrinterConnection {
+    var supportedActions: Set<PrintAction> { [] }
+    func makeCamera() -> CameraFeed? { nil }
+    func perform(_ action: PrintAction) async -> Bool { false }
 }
 
 extension Optional where Wrapped == String {
